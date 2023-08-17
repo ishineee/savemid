@@ -5,7 +5,6 @@
 
 class MidiFile
 {
-	std::uint32_t m_bpm;
 	std::uint32_t m_delta;
 	std::ofstream m_file;
 	std::streampos m_trackPos;
