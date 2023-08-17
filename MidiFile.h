@@ -51,8 +51,6 @@ public:
 
 	template <class... Ts>
 	void WriteChord(const std::uint32_t endDelta, const Ts& ...args);
-	template <class... Ts>
-	void WriteMulNotes(const Ts& ...args);
 	template <typename... Ts>
 	void WriteEvent(const std::uint32_t delta, const std::uint8_t Event, const Ts& ...args);
 	template <class... Ts>
