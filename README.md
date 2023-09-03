@@ -56,5 +56,6 @@ int main()
 }
 ```
 Once again, you can write as many notes as you want to create a chord with.
-
+How about i want to write an event that the library doesn't have a function for? 
+`WriteEvent` will let you do this, but you can also use `Write` or `Put` functions, all variadic.
 # maybe i will update this with more info soon
