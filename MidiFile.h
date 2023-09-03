@@ -111,7 +111,7 @@ struct NoteGroup
 
 class MidiFile
 {
-	std::uint32_t m_ticksPerQuarter;
+	const std::uint32_t m_ticksPerQuarter;
 	std::ofstream m_file;
 	std::streampos m_trackPos;
 	bool Init(std::string_view fileName, const std::uint32_t bpm);
@@ -158,7 +158,7 @@ public:
 	template <typename... Ts>
 	void WriteNotes(const Ts&& ...args);
 	template <typename... Ts>
-	void WriteChord(const std::uint32_t endDelta, const Ts&& ...args);
+	void WriteChord(const std::uint32_t startDelta, const std::uint32_t endDelta, const Ts&& ...args);
 	template <typename... Ts>
 	void WriteMulNotes(const Ts& ...args);
 	template <typename... Ts>
@@ -282,14 +282,14 @@ inline void MidiFile::WriteNotes(const Ts && ...args)
 
 // Writes a chord at a time. Takes the variadic arguments as Notes type.
 template<typename ...Ts>
-inline void MidiFile::WriteChord(const std::uint32_t endDelta, const Ts&& ...args)
+inline void MidiFile::WriteChord(const std::uint32_t startDelta, const std::uint32_t endDelta, const Ts&& ...args)
 {
 	static_assert((... && std::is_same_v<Ts, Notes>));
 
-	((this->NoteOn(0, args, 100)), ...);
+	((this->NoteOn(startDelta, args, 100)), ...);
 	int counter = 0;
 	(([this, &counter, &args, endDelta]() {
-		this->NoteOff(counter == 0 ? endDelta : 0, args);
+		this->NoteOff(!counter ? endDelta : 0, args);
 		counter += 1;
 		}()), ...);
 }
