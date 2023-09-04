@@ -11,7 +11,7 @@
 #include <bit>
 #include <array>
 
-enum class Notes : std::uint8_t
+constexpr enum class Notes : std::uint8_t
 {
 	INVALID_NOTE = 11,
 	C,
@@ -88,26 +88,52 @@ enum class Notes : std::uint8_t
 	B6
 };
 
+constexpr enum class Events : std::uint8_t
+{
+	NoteOn = 0x90,
+	NoteOff = 0x80
+};
+
+constexpr enum class ControlChange : std::uint8_t
+{
+	ControlMessage = 0xB0,
+	AllNotesOff = 0x7B
+};
+
+constexpr enum class MetaEvents : std::uint8_t
+{
+	StartMeta = 0xFF,
+	SetTempoEvent = 0x51,
+	SetBPM = 0x03,
+	EndTrack = 0x2F
+};
+
 struct Note
 {
-	std::uint32_t deltaStart;
+	std::uint32_t deltaStart = 0;
 	std::uint32_t deltaEnd;
 	Notes note;
-	std::uint8_t velocity;
+	std::uint8_t velocity = 100;
 
+	// Assign everything to your liking, velocity = 100 in default
 	Note(
-		const std::uint32_t delta_start,
-		const std::uint32_t delta_end,
-		const Notes note,
-		const std::uint8_t velocity
-	) : deltaStart(delta_start), deltaEnd(delta_end), note(note), velocity(velocity) {}
+		std::uint32_t deltaStart,
+		std::uint32_t deltaEnd,
+		Notes note,
+		std::uint8_t velocity = 100
+	) : deltaStart(deltaStart), deltaEnd(deltaEnd), note(note), velocity(velocity) {};
+	// deltaStart = 0 and velocity = 100
+	explicit Note(std::uint32_t deltaEnd, Notes note) : deltaEnd(deltaEnd), note(note) {};
 };
 
 struct NoteGroup
 {
-	std::pair<bool, int> ifOverlap;
+	std::pair<bool, std::uint32_t> ifOverlap;
 	std::vector<Note> notes;
+	NoteGroup(std::pair<bool, int> const& ifOverlap, std::vector<Note> const& notes) : ifOverlap(ifOverlap), notes(notes) {}
 };
+
+
 
 class MidiFile
 {
@@ -121,28 +147,9 @@ class MidiFile
 	void CalculateTrackSize();
 
 public:
-	enum class Events : std::uint8_t
-	{
-		NoteOn = 0x90,
-		NoteOff = 0x80
-	};
-
-	enum class ControlChange : std::uint8_t
-	{
-		ControlMessage = 0xB0,
-		AllNotesOff = 0x7B
-	};
-
-	enum class MetaEvents : std::uint8_t
-	{
-		StartMeta = 0xFF,
-		SetTempoEvent = 0x51,
-		SetBPM = 0x03,
-		EndTrack = 0x2F
-	};
 
 	MidiFile() = default;
-	explicit MidiFile(std::string_view fileName, const std::uint32_t bpm, const std::uint32_t delta) : m_ticksPerQuarter(delta)
+	explicit MidiFile(std::string_view fileName, const std::uint32_t bpm, const std::uint32_t ticksPerQuarter) : m_ticksPerQuarter(ticksPerQuarter)
 	{
 		if (!Init(fileName, bpm))
 		{
@@ -156,9 +163,9 @@ public:
 	void NoteOff(const std::uint32_t delta, const Notes note);
 
 	template <typename... Ts>
-	void WriteNotes(const Ts&& ...args);
+	void WriteNotes(const Ts& ...args);
 	template <typename... Ts>
-	void WriteChord(const std::uint32_t startDelta, const std::uint32_t endDelta, const Ts&& ...args);
+	void WriteChord(const std::uint32_t startDelta, const std::uint32_t endDelta, const Ts& ...args);
 	template <typename... Ts>
 	void WriteMulNotes(const Ts& ...args);
 	template <typename... Ts>
@@ -228,7 +235,7 @@ void MidiFile::CalculateTrackSize()
 // does a calculation and puts the result as a 24-bit integer into the file
 void MidiFile::SetTempo(const std::uint32_t bpm)
 {
-	using enum MidiFile::MetaEvents;
+	using enum MetaEvents;
 	Put(0x00, StartMeta, SetTempoEvent, SetBPM);
 	std::uint32_t bpmcalc = 60000000 / bpm;
 	Put((bpmcalc >> 16) & 0xFF, (bpmcalc >> 8) & 0xFF, bpmcalc & 0xFF);
@@ -273,7 +280,7 @@ void MidiFile::CreateTrackChunk()
 
 // Writes a single note at a time. Takes the Note struct.
 template<typename ...Ts>
-inline void MidiFile::WriteNotes(const Ts && ...args)
+inline void MidiFile::WriteNotes(const Ts& ...args)
 {
 	static_assert((... && std::is_same_v<Ts, Note>));
 
@@ -282,7 +289,7 @@ inline void MidiFile::WriteNotes(const Ts && ...args)
 
 // Writes a chord at a time. Takes the variadic arguments as Notes type.
 template<typename ...Ts>
-inline void MidiFile::WriteChord(const std::uint32_t startDelta, const std::uint32_t endDelta, const Ts&& ...args)
+inline void MidiFile::WriteChord(const std::uint32_t startDelta, const std::uint32_t endDelta, const Ts& ...args)
 {
 	static_assert((... && std::is_same_v<Ts, Notes>));
 
@@ -298,36 +305,27 @@ template<typename ...Ts>
 inline void MidiFile::WriteMulNotes(const Ts & ...args)
 {
 	static_assert((... && std::is_same_v<Ts, NoteGroup>));
-
-	const auto forloop = [this](const std::vector<Note>& notes, const std::pair<bool, int>& ifOverlap)
+	const auto lambda = [this](const NoteGroup& group) 
+	{
+		if (!group.ifOverlap.first) {
+			for (const auto& note : group.notes)
+				WriteNotes(note);
+		}
+		else
 		{
-			int curTick = 0;
-			for (const Note& note : notes) { curTick += note.deltaStart; }
-			int counter = 0;
-			for (const Note& note : notes) { this->NoteOn(note.deltaStart, note.note, note.velocity); }
-			for (const Note& note : notes)
-			{
-				if (counter == 0)
-				{
-					this->NoteOff(static_cast<std::uint32_t>(ifOverlap.second - curTick), note.note);
-				}
-				else { this->NoteOff(0, note.note); }
-				++counter;
+			std::uint32_t delta = 0;
+			std::uint16_t counter = 0;
+			for (const auto& note : group.notes) {
+				delta += note.deltaStart;
+				this->NoteOn(note.deltaStart, note.note, note.velocity);
 			}
-		};
-
-	(([this, &args, &forloop]()
-		{
-			if (!args.ifOverlap.first)
-			{
-				for (const Note& note : args.notes)
-				{
-					this->NoteOn(note.deltaStart, note.note, note.velocity);
-					this->NoteOff(note.deltaEnd, note.note);
-				}
+			for (const auto& note : group.notes) {
+				(!counter) ? this->NoteOff(group.ifOverlap.second - delta, note.note) : this->NoteOff(0, note.note);
+				counter++;
 			}
-			else { forloop(args.notes, args.ifOverlap); }
-		})(), ...);
+		} 
+	};
+	((lambda(args)), ...);
 }
 
 // Writes delta, event, and the variadic arguments into the file.
