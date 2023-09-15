@@ -11,7 +11,7 @@
 #include <bit>
 #include <array>
 
-constexpr enum class Notes : std::uint8_t
+enum class Notes : std::uint8_t
 {
 	INVALID_NOTE = 11,
 	C,
@@ -88,19 +88,19 @@ constexpr enum class Notes : std::uint8_t
 	B6
 };
 
-constexpr enum class Events : std::uint8_t
+enum class Events : std::uint8_t
 {
 	NoteOn = 0x90,
 	NoteOff = 0x80
 };
 
-constexpr enum class ControlChange : std::uint8_t
+enum class ControlChange : std::uint8_t
 {
 	ControlMessage = 0xB0,
 	AllNotesOff = 0x7B
 };
 
-constexpr enum class MetaEvents : std::uint8_t
+enum class MetaEvents : std::uint8_t
 {
 	StartMeta = 0xFF,
 	SetTempoEvent = 0x51,
@@ -246,6 +246,7 @@ void MidiFile::EndFile()
 {
 	Put(0x00, MetaEvents::StartMeta, MetaEvents::EndTrack, 0x00);
 	CalculateTrackSize();
+	m_file.close();
 }
 
 // Writes the NoteOn event into the file using WriteEvent function.
@@ -305,7 +306,7 @@ template<typename ...Ts>
 inline void MidiFile::WriteMulNotes(const Ts & ...args)
 {
 	static_assert((... && std::is_same_v<Ts, NoteGroup>));
-	const auto lambda = [this](const NoteGroup& group) 
+	const auto lambda = [this](const NoteGroup& group)
 	{
 		if (!group.ifOverlap.first) {
 			for (const auto& note : group.notes)
@@ -323,7 +324,7 @@ inline void MidiFile::WriteMulNotes(const Ts & ...args)
 				(!counter) ? this->NoteOff(group.ifOverlap.second - delta, note.note) : this->NoteOff(0, note.note);
 				counter++;
 			}
-		} 
+		}
 	};
 	((lambda(args)), ...);
 }
